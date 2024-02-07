@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC P2P Client</title>
+    <style>
+        video {
+            width: 100%;
+            max-width: 400px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <video id="localVideo" autoplay playsinline></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+
+    <script>
+        const socket = io('http://13.209.75.236:3000'); // 서버 주소에 맞게 변경
+
+        let localStream;
+        let remoteStream;
+        let peerConnection;
+        let roomName = "123";
+
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+
+        // Get local user media (camera and microphone)
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                localStream = stream;
+                localVideo.srcObject = stream;
+
+                // Initialize WebRTC peer connection
+                initializePeerConnection();
+            })
+            .catch(error => {
+                console.error('Error accessing media devices:', error);
+            });
+
+        function initializePeerConnection() {
+            // Create peer connection
+            // peerConnection = new RTCPeerConnection();
+            peerConnection = new RTCPeerConnection({
+                iceServers: [{ urls: [
+                    "stun:stun.l.google.com:19302",
+                ]
+            },
+            {
+                urls: "turn:a.relay.metered.ca:80",
+                username: "58e686be527c0068cfb5ba6d",
+                credential: "ka326fwi9Pp+JP8w",
+            }
+            ]});
+            
+            // Add local stream to peer connection
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+
+            // Set up event handlers for the peer connection
+
+            // Handle incoming remote stream
+            peerConnection.ontrack = (event) => {
+                remoteStream = event.streams[0];
+                remoteVideo.srcObject = remoteStream;
+            };
+
+            // Handle ICE candidate events
+            peerConnection.onicecandidate = (event) => {
+                console.log("recv candidate");
+                console.log(event);//
+                console.log("recv candidate");
+
+                if (event.candidate) {
+                    // Send the ICE candidate to the other peer
+                    // socket.emit('candidate', { ice: event.candidate });
+                    socket.emit('candidate', event.candidate, roomName);
+                }
+            };
+
+
+
+            // Create an offer to start the WebRTC connection
+            // peerConnection.createOffer()
+            //     .then(offer => peerConnection.setLocalDescription(offer))
+            //     .then(() => {
+            //         // Send the offer to the other peer
+            //         socket.emit('sdp', { sdp: peerConnection.localDescription });
+            //     })
+            //     .catch(error => {
+            //         console.error('Error creating offer:', error);
+            //     });
+
+
+            //room 참여 
+            socket.emit("join_room", roomName);
+        }
+
+        // Handle incoming offer from the other peer
+
+        // Handle incoming answer from the other peer
+
+        // Handle incoming ICE candidates from the other peer
+
+    function onMessage(msg) {
+        const ul = document.querySelector("ul");
+        const li = document.createElement("li");
+        li.innerText = msg;
+        ul.append(li);
+    }
+
+    // 기존 유저가 있고, 새로운 유저가 들어왔다면 오퍼생성
+    socket.on("all_users", async (allUsers) => {
+        // dataChannel = peerConnection.createDataChannel("chat");
+        // dataChannel.addEventListener("message", (event) => {
+        //     onMessage(event.data);
+        // });
+        console.log("all_users");
+        console.log(allUsers);
+        console.log("all_users");
+
+        const offer = await peerConnection.createOffer();
+        peerConnection.setLocalDescription(offer);
+        socket.emit("offer", offer, roomName);
+    });
+
+
+    socket.on("getOffer", async (offer) => { 
+        // peerConnection.addEventListener("datachannel", (event) => {
+        //     dataChannel = event.channel;
+        //     dataChannel.addEventListener("message", (event)=> {
+        //         onMessage(event.data);
+        //     });
+        // })
+        console.log("getOffer");
+        console.log(offer);
+        console.log("getOffer");
+
+        peerConnection.setRemoteDescription(offer);
+        const answer = await peerConnection.createAnswer();
+        peerConnection.setLocalDescription(answer);
+        socket.emit("answer", answer, roomName);
+    });
+    socket.on("getAnswer", (answer) => {
+        console.log("getAnswer");
+        console.log(answer);
+        console.log("getAnswer");
+
+        peerConnection.setRemoteDescription(answer);
+    });
+    socket.on("getCandidate", (ice) => {
+
+        console.log("getCandidate");
+        console.log(ice);
+        console.log("getCandidate");
+        
+        peerConnection.addIceCandidate(ice);
+    });
+    
+    </script>
+</body>
+</html>
